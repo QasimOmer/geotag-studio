@@ -20,21 +20,24 @@ function coordsFromText(t) {
   if (m) return { lat: +m[1], lon: +m[2] };
   return null;
 }
-function coordsFromHtml(html) {
-  // static map preview in the page's meta tags: ...staticmap?center=40.74%2C-73.98...
-  let m = html.match(/staticmap\?center=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/);
-  if (m) return { lat: +m[1], lon: +m[2] };
-  // window.APP_INITIALIZATION_STATE=[[[zoom,lng,lat]
-  m = html.match(/APP_INITIALIZATION_STATE=\[\[\[\s*[\d.]+\s*,\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\]/);
-  if (m) return { lat: +m[2], lon: +m[1] };
-  return coordsFromText(html.slice(0, 200000));
+// NOTE: never read coordinates from the Maps page HTML: its map centre / static preview is the
+// server's IP-based default view, not the place. Only the (redirected) link itself is trusted.
+
+// Place name / address carried by the link (used for an approximate address lookup)
+function placeQuery(u) {
+  const d = (() => { try { return decodeURIComponent(u.href.replace(/\+/g, ' ')); } catch { return u.href; } })();
+  const m = d.match(/\/maps\/place\/([^/@?]+)/) || d.match(/[?&](?:q|query|daddr)=([^&]+)/i);
+  if (!m) return null;
+  const q = m[1].trim();
+  return /^-?\d+\.\d+\s*,/.test(q) || /^place_id:/i.test(q) ? null : q;
 }
 const ok = (c) => c && isFinite(c.lat) && isFinite(c.lon) && Math.abs(c.lat) <= 90 && Math.abs(c.lon) <= 180;
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=3600');
   let url;
-  try { url = new URL(String(req.query?.url || '')); } catch { return res.status(400).json({ error: 'Invalid link' }); }
+  try { url = new URL(String(req.query?.url || '').trim()); } catch { return res.status(400).json({ error: 'Invalid link' }); }
+  if (url.protocol === 'http:') url.protocol = 'https:';
   if (!allowed(url)) return res.status(400).json({ error: 'Only Google Maps / Business Profile links can be expanded' });
 
   try {
@@ -55,11 +58,9 @@ export default async function handler(req, res) {
         url = next;
         continue;
       }
-      if (r.ok && /html/.test(r.headers.get('content-type') || '')) {
-        const html = (await r.text()).slice(0, 3_000_000);
-        const c2 = coordsFromHtml(html);
-        if (ok(c2)) return res.status(200).json({ url: url.href, ...c2 });
-        // some short links use a JS/meta redirect
+      if (r.ok && /html/.test(r.headers.get('content-type') || '') && !/google\.[a-z.]+$/i.test(url.hostname)) {
+        const html = (await r.text()).slice(0, 500_000);
+        // some short-link pages use a JS/meta redirect
         const meta = html.match(/<meta[^>]+http-equiv=["']refresh["'][^>]+url=([^"'>]+)/i) || html.match(/window\.location(?:\.href)?\s*=\s*["']([^"']+)/);
         if (meta) {
           const next = new URL(meta[1].replace(/&amp;/g, '&'), url);
@@ -68,7 +69,7 @@ export default async function handler(req, res) {
       }
       break;
     }
-    return res.status(200).json({ url: url.href });
+    return res.status(200).json({ url: url.href, query: placeQuery(url) });
   } catch (e) {
     return res.status(502).json({ error: `Could not open link: ${e.message}` });
   }

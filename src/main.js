@@ -160,11 +160,15 @@ async function resolveLocation(text, depth = 0) {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || 'Could not open that link');
       if (j.lat != null) return { lat: j.lat, lon: j.lon };
-      if (j.url && j.url !== p.shortUrl) {
-        const again = await resolveLocation(j.url, depth + 1);
-        if (again) return again;
+      if (j.query) {
+        // link only carries a business name/address: look it up (approximate)
+        const rs = await nominatim(`/search?format=jsonv2&addressdetails=1&limit=1&q=${encodeURIComponent(j.query)}`).catch(() => []);
+        if (rs[0]) {
+          toast(`📍 Approximate location found from the address "${j.query}". Drag the pin to the exact spot, or paste exact coordinates for best accuracy.`, '', 9000);
+          return { lat: Number(rs[0].lat), lon: Number(rs[0].lon), place: toPlace(rs[0]), label: rs[0].display_name };
+        }
       }
-      throw new Error('That link has no location in it. Open it, right-click the pin in Google Maps and copy the coordinates.');
+      throw new Error('This link doesn\'t include coordinates. In Google Maps, right-click the business pin and click the numbers at the top of the menu to copy them, then paste here.');
     } finally { t.remove(); }
   }
 
