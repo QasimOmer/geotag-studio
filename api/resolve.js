@@ -69,7 +69,10 @@ export default async function handler(req, res) {
       }
       break;
     }
-    return res.status(200).json({ url: url.href, query: placeQuery(url) });
+    // share.google links for a Business Profile land on a Google *Search* knowledge panel (?kgmid=…):
+    // no coordinates are available without running Google's JS, so tell the client which business it is.
+    const kind = /^\/search/.test(url.pathname) ? 'search' : 'maps';
+    return res.status(200).json({ url: url.href, query: placeQuery(url), kind });
   } catch (e) {
     return res.status(502).json({ error: `Could not open link: ${e.message}` });
   }

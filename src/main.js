@@ -82,6 +82,7 @@ async function setLocation(lat, lon, opts = {}) {
     return;
   }
   lon = ((((lon + 180) % 360) + 360) % 360) - 180;
+  if (helperActive) hideCoordHelper();
   placeMarker(lat, lon);
   if (opts.fly) map.flyTo([lat, lon], Math.max(map.getZoom(), opts.zoom || 16), { duration: 0.8 });
   $('#in-lat').value = lat.toFixed(6);
@@ -160,6 +161,13 @@ async function resolveLocation(text, depth = 0) {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || 'Could not open that link');
       if (j.lat != null) return { lat: j.lat, lon: j.lon };
+      if (j.kind === 'search' && j.query) {
+        // Business Profile share link -> Google Search panel: only the business name is known.
+        // Guessing by name could land on the wrong business, so guide the user to the exact pin.
+        const err = new Error(`"${j.query}" link has no coordinates`);
+        err.manualQuery = j.query;
+        throw err;
+      }
       if (j.query) {
         // link only carries a business name/address: look it up (approximate)
         const rs = await nominatim(`/search?format=jsonv2&addressdetails=1&limit=1&q=${encodeURIComponent(j.query)}`).catch(() => []);
@@ -204,10 +212,45 @@ async function goTo(text, { silentIfNone = false } = {}) {
     await setLocation(r.lat, r.lon, { fly: true, place: r.place, label: r.label });
     return true;
   } catch (e) {
+    if (e.manualQuery) { resultsEl.hidden = true; showCoordHelper(e.manualQuery); return 'error'; }
     if (!silentIfNone) toast(`${e.message}`, 'error', 7000);
     return 'error';
   }
 }
+
+// Guided "get exact coordinates from Google Maps" helper. When the user comes back to this tab
+// we try to read the copied coordinates from the clipboard automatically.
+const helper = $('#coord-helper');
+let helperActive = false;
+function showCoordHelper(name) {
+  $('#helper-name').textContent = name;
+  $('#helper-open').href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+  helper.hidden = false;
+  helperActive = true;
+  helper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function hideCoordHelper() { helper.hidden = true; helperActive = false; }
+$('#helper-close').onclick = hideCoordHelper;
+async function tryClipboard(fromUser = false) {
+  let text = '';
+  try { text = await navigator.clipboard.readText(); } catch {
+    if (fromUser) toast('Your browser blocked clipboard access — click the search box and press Ctrl+V (⌘V on Mac).', '', 6000);
+    return false;
+  }
+  const p = parseLocation(text);
+  if (p && p.lat != null) {
+    hideCoordHelper();
+    $('#search').value = text.trim();
+    await setLocation(p.lat, p.lon, { fly: true });
+    toast('📍 Exact coordinates pasted from Google Maps', 'ok');
+    return true;
+  }
+  if (fromUser) toast('No coordinates on the clipboard yet. In Google Maps, right-click the pin and click the numbers at the top.', '', 6000);
+  return false;
+}
+$('#helper-paste').onclick = () => tryClipboard(true);
+window.addEventListener('focus', () => { if (helperActive) setTimeout(() => tryClipboard(false), 300); });
+document.addEventListener('visibilitychange', () => { if (helperActive && !document.hidden) setTimeout(() => tryClipboard(false), 300); });
 const resultsEl = $('#search-results');
 async function doSearch() {
   const q = $('#search').value.trim();

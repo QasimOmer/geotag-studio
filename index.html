@@ -45,6 +45,16 @@
           <ul id="history-list" class="dropdown right" hidden></ul>
         </div>
       </div>
+      <div id="coord-helper" class="helper" hidden>
+        <button type="button" class="helper-x" id="helper-close" aria-label="Close">✕</button>
+        <b>This Business Profile link doesn't include coordinates.</b>
+        <span class="muted">It opens a Google Search card for <b id="helper-name"></b>. Get the exact pin in 3 quick steps:</span>
+        <ol>
+          <li><a class="btn primary" id="helper-open" target="_blank" rel="noopener">Open in Google Maps ↗</a></li>
+          <li><b>Right-click the red pin</b> and click the <b>numbers at the top</b> of the menu (e.g. <code>24.8607, 67.0011</code>), which copies them.<br /><span class="muted small">On a phone: long-press the pin, then tap the coordinates in the search bar to copy.</span></li>
+          <li>Come back to this tab. We'll paste them automatically, or <button type="button" class="link" id="helper-paste">click here to paste</button> / press <kbd>Ctrl</kbd>+<kbd>V</kbd>.</li>
+        </ol>
+      </div>
       <div id="map"></div>
       <div class="coords-row">
         <label>Latitude <input id="in-lat" type="text" inputmode="decimal" autocomplete="off" placeholder="40.748817" /></label>
