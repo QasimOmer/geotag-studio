@@ -133,7 +133,7 @@
     <details><summary>Do Google or social networks keep the geotags?</summary>
       <p>Many platforms (including Google Business Profile, Facebook and Instagram) strip metadata on upload, so geotags mostly matter for your own website, image search on your pages and photo libraries. Descriptive titles, alt text and filenames still help SEO.</p></details>
     <details><summary>How does the free AI work?</summary>
-      <p><b>Built-in</b> runs a small captioning model directly in your browser — no key, nothing leaves your device (first use downloads the model once). For richer, SEO-quality results and location guessing, add a free <b>Google Gemini</b> key, or use any OpenAI-compatible provider such as OpenRouter's free models or Groq.</p></details>
+      <p><b>Built-in</b> runs a small captioning model directly in your browser — no key, nothing leaves your device (first use downloads the model once). For richer, SEO-quality results and location guessing, pick <b>Groq</b> (very fast, free tier), add a free <b>Google Gemini</b> key, or use any OpenAI-compatible provider such as OpenRouter's free models.</p></details>
     <details><summary>How can I verify the geotags?</summary>
       <p>Click <b>ⓘ</b> on any photo to compare its metadata before and after. On your computer, Windows Explorer → Properties → Details, or macOS Preview → Inspector → GPS will show the location.</p></details>
   </section>
@@ -149,10 +149,23 @@
       <div class="providers">
         <label class="provider"><input type="radio" name="provider" value="builtin" />
           <div><b>Built-in (in your browser)</b><span>Free, no key, fully private. Basic captions + smart local-SEO keywords. ~250 MB model downloads once.</span></div></label>
+        <label class="provider"><input type="radio" name="provider" value="groq" />
+          <div><b>Groq ⚡</b><span>Very fast vision AI with a free tier. Titles, alt text, keywords + location guessing. Uses this site's key, or your own from <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com</a>.</span></div></label>
         <label class="provider"><input type="radio" name="provider" value="gemini" />
           <div><b>Google Gemini</b><span>Best quality + location guessing. Free API key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.</span></div></label>
         <label class="provider"><input type="radio" name="provider" value="openai" />
           <div><b>OpenAI-compatible</b><span>OpenRouter free models, Groq free tier, local Ollama, or any compatible API.</span></div></label>
+      </div>
+      <div class="pgroup" data-for="groq">
+        <p class="muted small" id="groq-status">Checking whether this site has a Groq key…</p>
+        <label>Your Groq API key <span class="muted">(optional if this site has one)</span>
+          <input name="groqKey" type="password" autocomplete="off" placeholder="gsk_…" /></label>
+        <label>Model
+          <select name="groqModel">
+            <option value="qwen/qwen3.8-27b">qwen/qwen3.8-27b (recommended)</option>
+            <option value="meta-models/muse-spark-open">meta-models/muse-spark-open (limited preview)</option>
+          </select>
+        </label>
       </div>
       <div class="pgroup" data-for="gemini">
         <label>Gemini API key <input name="geminiKey" type="password" autocomplete="off" placeholder="AIza…" /></label>

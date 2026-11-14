@@ -15,8 +15,17 @@ Free, private, browser-only photo geotagger with AI.
 - **Strip metadata** (privacy) while keeping orientation
 - **Free AI**
   - Built-in: in-browser image captioning (Transformers.js), no key, nothing leaves your device
+  - **Groq** (free tier, very fast): uses the site's shared key via `/api/groq`, or a visitor's own key
   - Google Gemini (free API key): SEO titles, alt text, keywords + **AI location guessing**
-  - Any OpenAI-compatible API: OpenRouter free models, Groq free tier, local Ollama
+  - Any OpenAI-compatible API: OpenRouter free models, local Ollama
+
+## Groq setup (shared key for all visitors)
+1. Create a free key at https://console.groq.com/keys
+2. Vercel → your project → **Settings → Environment Variables** → add `GROQ_API_KEY` (Production)
+3. Redeploy. Visitors now get Groq AI by default with no key.
+
+Optional env vars: `GROQ_MODEL` (default `qwen/qwen3.8-27b`), `GROQ_RATE_LIMIT` (requests per IP per minute, default 15).
+The key never reaches the browser; `api/groq.js` proxies requests server-side.
 - Light/dark theme, mobile friendly
 
 ## Develop

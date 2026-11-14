@@ -4,7 +4,7 @@ import L from 'leaflet';
 import exifr from 'exifr';
 import JSZip from 'jszip';
 import { writeMetadata, detectType, webpExifTiff } from './meta.js';
-import { loadSettings, saveSettings, describeImage, guessLocation, PRESETS } from './ai.js';
+import { loadSettings, saveSettings, hasSavedSettings, groqServerStatus, describeImage, guessLocation, PRESETS } from './ai.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -599,8 +599,19 @@ async function inspect(p) {
 }
 
 // ---------------- AI ----------------
-const providerName = () => ({ builtin: 'Built-in', gemini: 'Gemini', openai: 'OpenAI-compatible' }[aiSettings.provider]);
+const providerName = () => ({ builtin: 'Built-in', groq: 'Groq', gemini: 'Gemini', openai: 'OpenAI-compatible' }[aiSettings.provider] || 'Built-in');
 $('#ai-provider-label').textContent = providerName();
+
+// If the site owner configured GROQ_API_KEY on the server, visitors get Groq by default (no key needed).
+groqServerStatus().then((s) => {
+  $('#groq-status').textContent = s.configured
+    ? '✓ This site provides a shared Groq key — no key needed. Add your own to skip shared rate limits.'
+    : 'This site has no shared Groq key. Paste your free key from console.groq.com.';
+  if (s.configured && !hasSavedSettings()) {
+    aiSettings.provider = 'groq';
+    $('#ai-provider-label').textContent = providerName();
+  }
+});
 
 const dlgAi = $('#dlg-ai');
 const aiForm = $('#ai-form');
@@ -671,7 +682,7 @@ $('#btn-ai-locate').onclick = async () => {
   const p = selected()[0];
   if (!p) return;
   if (aiSettings.provider === 'builtin') {
-    toast('Location guessing needs a vision LLM. Opening AI settings — Gemini has a free key.', '', 5000);
+    toast('Location guessing needs a vision AI. Opening AI settings — pick Groq or Gemini (both free).', '', 5000);
     $('#btn-ai-settings').click();
     return;
   }

@@ -7,11 +7,14 @@
 const LS_KEY = 'gts.ai.settings';
 export const PRESETS = {
   openrouter: { baseUrl: 'https://openrouter.ai/api/v1', model: 'google/gemma-3-27b-it:free', keyUrl: 'https://openrouter.ai/keys' },
-  groq: { baseUrl: 'https://api.groq.com/openai/v1', model: 'meta-llama/llama-4-scout-17b-16e-instruct', keyUrl: 'https://console.groq.com/keys' },
+  groq: { baseUrl: 'https://api.groq.com/openai/v1', model: 'qwen/qwen3.8-27b', keyUrl: 'https://console.groq.com/keys' },
   ollama: { baseUrl: 'http://localhost:11434/v1', model: 'llava', keyUrl: 'https://ollama.com' },
 };
+export const GROQ_MODELS = ['qwen/qwen3.8-27b', 'meta-models/muse-spark-open'];
 const DEFAULTS = {
   provider: 'builtin',
+  groqKey: '',
+  groqModel: GROQ_MODELS[0],
   geminiKey: '',
   geminiModel: 'gemini-2.5-flash',
   openaiBase: PRESETS.openrouter.baseUrl,
@@ -24,6 +27,20 @@ const DEFAULTS = {
 
 export function loadSettings() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS_KEY) || '{}') }; } catch { return { ...DEFAULTS }; }
+}
+export function hasSavedSettings() {
+  try { return !!localStorage.getItem(LS_KEY); } catch { return false; }
+}
+
+// Does this site have a server-side Groq key (GROQ_API_KEY on Vercel)?
+let groqServerPromise = null;
+export function groqServerStatus() {
+  if (!groqServerPromise) {
+    groqServerPromise = fetch('/api/groq', { headers: { Accept: 'application/json' } })
+      .then((r) => (r.ok && /json/.test(r.headers.get('content-type') || '') ? r.json() : { configured: false }))
+      .catch(() => ({ configured: false }));
+  }
+  return groqServerPromise;
 }
 export function saveSettings(s) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch { /* private mode */ }
@@ -156,6 +173,39 @@ async function openaiCompat(settings, prompt, dataUrl) {
   return parseJson(j?.choices?.[0]?.message?.content || '');
 }
 
+// Groq: with the user's own key -> straight from the browser; otherwise -> this site's /api/groq proxy.
+async function groq(settings, prompt, dataUrl) {
+  const model = settings.groqModel || GROQ_MODELS[0];
+  if (settings.groqKey) {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.groqKey}` },
+      body: JSON.stringify({
+        model,
+        temperature: 0.4,
+        max_completion_tokens: 800,
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: dataUrl } }] }],
+      }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j?.error?.message || `Groq error ${res.status}`);
+    return parseJson(j?.choices?.[0]?.message?.content || '');
+  }
+  const res = await fetch('/api/groq', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, image: dataUrl, model }),
+  });
+  const isJson = /json/.test(res.headers.get('content-type') || '');
+  if (!isJson || res.status === 404) throw new Error('Groq server proxy is not available here. Add your own Groq key in AI settings.');
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j?.error || `Groq error ${res.status}`);
+  return parseJson(j.content);
+}
+
+const PROVIDERS = { gemini, groq, openai: openaiCompat };
+
 function clean(r) {
   const kws = Array.isArray(r.keywords) ? r.keywords : String(r.keywords || '').split(/[,;]/);
   return {
@@ -170,14 +220,14 @@ export async function describeImage(src, ctx, settings, onProgress) {
   if (settings.provider === 'builtin') return builtinDescribe(src, ctx, onProgress);
   onProgress?.('Asking AI…');
   const dataUrl = await toDataUrl(src, 768);
-  const fn = settings.provider === 'gemini' ? gemini : openaiCompat;
+  const fn = PROVIDERS[settings.provider] || openaiCompat;
   return clean(await fn(settings, describePrompt(ctx), dataUrl));
 }
 
 export async function guessLocation(src, settings) {
-  if (settings.provider === 'builtin') throw new Error('Location guessing needs Gemini or an OpenAI-compatible provider (both have free tiers). Open AI settings.');
+  if (settings.provider === 'builtin') throw new Error('Location guessing needs Groq, Gemini or an OpenAI-compatible provider (all have free tiers). Open AI settings.');
   const dataUrl = await toDataUrl(src, 1024);
-  const fn = settings.provider === 'gemini' ? gemini : openaiCompat;
+  const fn = PROVIDERS[settings.provider] || openaiCompat;
   const r = await fn(settings, LOCATE_PROMPT, dataUrl);
   const lat = Number(r.latitude), lon = Number(r.longitude);
   if (!isFinite(lat) || !isFinite(lon)) throw new Error('AI could not determine a location');
