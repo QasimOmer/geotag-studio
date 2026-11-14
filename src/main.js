@@ -4,6 +4,7 @@ import L from 'leaflet';
 import exifr from 'exifr';
 import JSZip from 'jszip';
 import { writeMetadata, detectType, webpExifTiff } from './meta.js';
+import { parseLocation, parseSingle, plusCodeToLatLon } from './coords.js';
 import { loadSettings, saveSettings, hasSavedSettings, groqServerStatus, describeImage, guessLocation, PRESETS } from './ai.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -76,7 +77,10 @@ function jitter(lat, lon, meters) {
 
 async function setLocation(lat, lon, opts = {}) {
   lat = Number(lat); lon = Number(lon);
-  if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) { toast('Invalid coordinates', 'error'); return; }
+  if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    toast(`Those coordinates are out of range (latitude −90…90, longitude −180…180). ${FORMAT_HELP}`, 'error', 8000);
+    return;
+  }
   lon = ((((lon + 180) % 360) + 360) % 360) - 180;
   placeMarker(lat, lon);
   if (opts.fly) map.flyTo([lat, lon], Math.max(map.getZoom(), opts.zoom || 16), { duration: 0.8 });
@@ -138,36 +142,83 @@ async function reverseGeocode(lat, lon) {
   } catch { return null; }
 }
 
-// Parse "lat, lng", DMS, or Google Maps / Apple Maps / OSM links
-function parseCoords(q) {
-  q = q.trim();
-  let m = q.match(/^(-?\d{1,2}(?:\.\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)$/);
-  if (m) return [Number(m[1]), Number(m[2])];
-  m = q.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || q.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
-    || q.match(/[?&](?:q|ll|query|sll|center|destination)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/i)
-    || q.match(/[#&]map=\d+\/(-?\d+\.\d+)\/(-?\d+\.\d+)/);
-  if (m) return [Number(m[1]), Number(m[2])];
-  const dms = /(\d+(?:\.\d+)?)\s*°\s*(\d+(?:\.\d+)?)?\s*['′]?\s*(\d+(?:\.\d+)?)?\s*["″]?\s*([NSEW])/gi;
-  const parts = [...q.matchAll(dms)];
-  if (parts.length === 2) {
-    const conv = (p) => { let v = Number(p[1]) + Number(p[2] || 0) / 60 + Number(p[3] || 0) / 3600; if (/[SW]/i.test(p[4])) v = -v; return { v, ax: /[NS]/i.test(p[4]) ? 'lat' : 'lon' }; };
-    const a = conv(parts[0]), b = conv(parts[1]);
-    return a.ax === 'lat' ? [a.v, b.v] : [b.v, a.v];
+// Turn anything the user pasted (coords, DMS, Maps/GBP links, short links, Plus Codes) into {lat, lon}.
+// Returns null when the text is just a place name (caller then does a normal address search).
+const FORMAT_HELP = 'Try: 40.748817, -73.985428 · 40°44\'55"N 73°59\'08"W · a Google Maps / Business Profile link · a Plus Code';
+async function resolveLocation(text, depth = 0) {
+  const p = parseLocation(text);
+  if (!p) return null;
+  if (p.lat != null) return { lat: p.lat, lon: p.lon };
+
+  if (p.shortUrl) {
+    if (depth > 1) throw new Error('Could not read that link.');
+    const t = toast('🔗 Opening link to read its location…', '', 20000);
+    try {
+      const r = await fetch(`/api/resolve?url=${encodeURIComponent(p.shortUrl)}`);
+      const isJson = /json/.test(r.headers.get('content-type') || '');
+      if (!isJson) throw new Error('Link expansion only works on the live site. Open the link in your browser and copy the full URL or the coordinates instead.');
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Could not open that link');
+      if (j.lat != null) return { lat: j.lat, lon: j.lon };
+      if (j.url && j.url !== p.shortUrl) {
+        const again = await resolveLocation(j.url, depth + 1);
+        if (again) return again;
+      }
+      throw new Error('That link has no location in it. Open it, right-click the pin in Google Maps and copy the coordinates.');
+    } finally { t.remove(); }
+  }
+
+  if (p.plus) {
+    let ref = null;
+    if (p.plus.indexOf('+') < 8) {
+      if (p.locality) {
+        const rs = await nominatim(`/search?format=jsonv2&limit=1&q=${encodeURIComponent(p.locality)}`).catch(() => []);
+        if (rs[0]) ref = { lat: Number(rs[0].lat), lon: Number(rs[0].lon) };
+      }
+      if (!ref && pin) ref = { lat: pin.lat, lon: pin.lon };
+      if (!ref && map.getZoom() >= 8) { const c = map.getCenter(); ref = { lat: c.lat, lon: c.lng }; }
+      if (!ref) throw new Error(`Short Plus Code "${p.plus}" needs a town after it, e.g. "${p.plus} Karachi".`);
+    }
+    const c = plusCodeToLatLon(p.plus, ref);
+    if (!c) throw new Error('Could not decode that Plus Code.');
+    return c;
+  }
+
+  if (p.query) {
+    const rs = await nominatim(`/search?format=jsonv2&addressdetails=1&limit=1&q=${encodeURIComponent(p.query)}`);
+    if (rs[0]) return { lat: Number(rs[0].lat), lon: Number(rs[0].lon), place: toPlace(rs[0]), label: rs[0].display_name };
+    throw new Error(`Couldn't find "${p.query}" on the map.`);
   }
   return null;
 }
 
+async function goTo(text, { silentIfNone = false } = {}) {
+  try {
+    const r = await resolveLocation(text);
+    if (!r) return false;
+    resultsEl.hidden = true;
+    await setLocation(r.lat, r.lon, { fly: true, place: r.place, label: r.label });
+    return true;
+  } catch (e) {
+    if (!silentIfNone) toast(`${e.message}`, 'error', 7000);
+    return 'error';
+  }
+}
 const resultsEl = $('#search-results');
 async function doSearch() {
   const q = $('#search').value.trim();
   if (!q) return;
-  const c = parseCoords(q);
-  if (c) { resultsEl.hidden = true; setLocation(c[0], c[1], { fly: true }); return; }
+  const done = await goTo(q);
+  if (done) return;
   resultsEl.innerHTML = '<li class="muted">Searching…</li>';
   resultsEl.hidden = false;
   try {
     const rs = await nominatim(`/search?format=jsonv2&addressdetails=1&limit=7&q=${encodeURIComponent(q)}`);
-    if (!rs.length) { resultsEl.innerHTML = '<li class="muted">No places found</li>'; return; }
+    if (!rs.length) {
+      resultsEl.innerHTML = '<li class="muted">No places found.<small></small></li>';
+      resultsEl.querySelector('small').textContent = FORMAT_HELP;
+      return;
+    }
     resultsEl.innerHTML = '';
     for (const r of rs) {
       const li = document.createElement('li');
@@ -202,8 +253,40 @@ $('#btn-locate').onclick = () => {
     { enableHighAccuracy: true, timeout: 10000 },
   );
 };
-$('#btn-set-coords').onclick = () => setLocation($('#in-lat').value, $('#in-lon').value, { fly: true });
-for (const id of ['#in-lat', '#in-lon']) $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-set-coords').click(); });
+// Lat/Lng boxes: accept one value each, OR a full pair / link pasted into either box.
+const latIn = $('#in-lat'), lonIn = $('#in-lon');
+$('#btn-set-coords').onclick = async () => {
+  latIn.classList.remove('bad'); lonIn.classList.remove('bad');
+  const a = latIn.value.trim(), b = lonIn.value.trim();
+  // a whole pair / link / Plus Code typed into one box (a single number never parses as a location)
+  for (const v of [a, b]) if (v && parseLocation(v)) { await goTo(v); return; }
+  const lat = parseSingle(a, 'lat'), lon = parseSingle(b, 'lon');
+  if (!isFinite(lat)) latIn.classList.add('bad');
+  if (!isFinite(lon)) lonIn.classList.add('bad');
+  if (!isFinite(lat) || !isFinite(lon)) {
+    toast(`${!isFinite(lat) ? 'Latitude' : 'Longitude'} isn't valid (latitude −90…90, longitude −180…180). ${FORMAT_HELP}`, 'error', 8000);
+    return;
+  }
+  setLocation(lat, lon, { fly: true });
+};
+for (const el of [latIn, lonIn]) {
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-set-coords').click(); });
+  el.addEventListener('input', () => el.classList.remove('bad'));
+  el.addEventListener('paste', (e) => {
+    const text = e.clipboardData?.getData('text') || '';
+    // a full pair / link pasted into a single box -> fill both boxes and jump there
+    if (parseLocation(text)) { e.preventDefault(); goTo(text); }
+  });
+}
+
+// 📋 Paste button + Ctrl+V anywhere on the page
+$('#btn-paste').onclick = async () => {
+  let text = '';
+  try { text = await navigator.clipboard.readText(); } catch { /* permission denied */ }
+  if (!text) { $('#search').focus(); toast('Press Ctrl+V (⌘V on Mac) in the search box to paste.', '', 4000); return; }
+  $('#search').value = text.trim();
+  doSearch();
+};
 
 // history
 function addHistory(h) {
@@ -241,7 +324,11 @@ window.addEventListener('drop', (e) => { if (!e.target.closest('#dropzone')) { e
 // paste images from clipboard
 window.addEventListener('paste', (e) => {
   const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'));
-  if (files.length) addFiles(files);
+  if (files.length) { addFiles(files); return; }
+  // pasted coordinates / a Maps link while not typing in a field -> jump there
+  if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  const text = e.clipboardData?.getData('text') || '';
+  if (parseLocation(text)) { e.preventDefault(); $('#search').value = text.trim(); goTo(text); }
 });
 
 const str = (v) => {
@@ -372,6 +459,7 @@ function renderGallery() {
       if (p.converted) add('from HEIC');
       if (p.existing.lat != null) add('had GPS', 'old');
       if (p.lat != null) add(`📍 ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`, 'new');
+      else if (p.existing.lat == null) add('no location yet', 'err');
       if (p.status === 'ai') add('AI working…', 'busy');
       if (p.status === 'error') add('error', 'err');
       if (p.status === 'done') add('✓ saved', 'new');
@@ -499,8 +587,28 @@ const slug = (s) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().re
 const MIME = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 const EXT = { jpeg: 'jpg', png: 'png', webp: 'webp' };
 
+const fmtSel = $('#sel-format');
+fmtSel.value = store.get('gts.format', 'auto');
+fmtSel.onchange = () => store.set('gts.format', fmtSel.value);
+
+async function toJpeg(blob) {
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement('canvas');
+  c.width = bmp.width; c.height = bmp.height;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; // JPG has no transparency
+  g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(bmp, 0, 0);
+  bmp.close?.();
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('JPG conversion failed'))), 'image/jpeg', 0.92));
+}
+
 async function buildOutput(p, strip = false) {
-  const buf = await p.blob.arrayBuffer();
+  let src = p.blob;
+  const kind = detectType(new Uint8Array(await src.slice(0, 16).arrayBuffer()));
+  const mode = fmtSel.value;
+  if (kind !== 'jpeg' && (mode === 'jpg' || (mode === 'auto' && kind === 'png'))) src = await toJpeg(src);
+  const buf = await src.arrayBuffer();
   const { bytes, type } = writeMetadata(buf, {
     title: p.title, description: p.description, keywords: p.keywords, author: p.author, copyright: p.copyright,
     date: p.date, lat: p.lat, lon: p.lon, alt: p.alt, place: p.place,
@@ -524,7 +632,7 @@ function saveBlob(blob, filename) {
 async function downloadPhotos(list, strip = false) {
   if (!list.length) return;
   const missing = list.filter((p) => p.lat == null && p.existing.lat == null).length;
-  if (!strip && missing) toast(`${missing} photo(s) have no location — only text tags will be written.`, '', 3500);
+  if (!strip && missing) toast(`⚠ ${missing} photo(s) have no location — click the map (with those photos selected) to add GPS. Only text tags will be written for them.`, 'error', 6000);
   try {
     if (list.length === 1) {
       const { blob, filename } = await buildOutput(list[0], strip);

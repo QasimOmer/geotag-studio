@@ -112,6 +112,9 @@ label.check input { width: auto; }
 .coords-row.small label:not(.check) { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; font-weight: 500; }
 .coords-row.small select { width: auto; padding: 4px 8px; }
 #place-label { flex: 1 1 100%; font-size: 12px; }
+.tip { margin: -2px 0 0; line-height: 1.7; }
+.tip code, kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; font-size: 11.5px; white-space: nowrap; }
+input.bad { border-color: var(--danger); outline: 2px solid color-mix(in srgb, var(--danger) 40%, transparent); }
 
 .dropzone {
   display: grid; place-items: center; gap: 4px; padding: 28px 16px; cursor: pointer; text-align: center;

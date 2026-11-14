@@ -34,10 +34,11 @@
     <section class="card map-card">
       <div class="search-row">
         <div class="search-wrap">
-          <input id="search" type="search" autocomplete="off" placeholder="Search place / address, paste lat,lng or a Google Maps link" />
+          <input id="search" type="search" autocomplete="off" placeholder="Paste coordinates, Google Maps / Business Profile link, Plus Code — or search an address" />
           <ul id="search-results" class="dropdown" hidden></ul>
         </div>
-        <button class="btn" id="btn-search">Search</button>
+        <button class="btn" id="btn-search">Go</button>
+        <button class="btn ghost" id="btn-paste" title="Paste coordinates or a link from your clipboard">📋 <span class="hide-sm">Paste</span></button>
         <button class="btn ghost icon" id="btn-locate" title="Use my current location">◎</button>
         <div class="history-wrap">
           <button class="btn ghost icon" id="btn-history" title="Recent locations">⟲</button>
@@ -46,11 +47,13 @@
       </div>
       <div id="map"></div>
       <div class="coords-row">
-        <label>Lat <input id="in-lat" type="number" step="any" placeholder="0.000000" /></label>
-        <label>Lng <input id="in-lon" type="number" step="any" placeholder="0.000000" /></label>
+        <label>Latitude <input id="in-lat" type="text" inputmode="decimal" autocomplete="off" placeholder="40.748817" /></label>
+        <label>Longitude <input id="in-lon" type="text" inputmode="decimal" autocomplete="off" placeholder="-73.985428" /></label>
         <label>Alt (m) <input id="in-alt" type="number" step="any" placeholder="optional" /></label>
         <button class="btn" id="btn-set-coords">Set</button>
       </div>
+      <p class="tip muted small">💡 Paste anything into the search box, either coordinate box, or press <kbd>Ctrl</kbd>+<kbd>V</kbd> anywhere:
+        <code>40.748817, -73.985428</code> · <code>40°44'55"N 73°59'08"W</code> · Google Maps / GBP share link · Plus Code like <code>Q257+HX New York</code></p>
       <div class="coords-row small">
         <label class="check"><input type="checkbox" id="chk-existing" checked /> Show existing geotags</label>
         <label>Spread
@@ -103,6 +106,14 @@
             <label>Altitude (m) <input data-field="alt" type="number" step="any" /></label>
           </div>
           <label class="check"><input type="checkbox" id="chk-rename" /> Rename files using title (SEO-friendly filenames)</label>
+          <label>Save as
+            <select id="sel-format">
+              <option value="auto">Auto: PNG → JPG, others keep format (recommended)</option>
+              <option value="original">Keep original format</option>
+              <option value="jpg">Always JPG</option>
+            </select>
+            <span class="muted small" style="font-weight:400">Windows and many apps don't show GPS for PNG files, so PNGs are saved as JPG by default.</span>
+          </label>
         </fieldset>
         <div class="actions">
           <button class="btn primary" id="btn-download" disabled>⬇ Write tags &amp; download</button>
@@ -129,7 +140,7 @@
     <details><summary>Are my photos uploaded anywhere?</summary>
       <p>No. Reading, editing and writing metadata happens entirely in your browser. The only network calls are map tiles, place search (OpenStreetMap Nominatim) and — only if you choose a cloud AI provider — a downscaled copy of the photo sent to that provider.</p></details>
     <details><summary>Which formats are supported?</summary>
-      <p>JPG gets full EXIF + XMP. PNG gets an <code>eXIf</code> chunk plus XMP, and WebP gets EXIF and XMP chunks. HEIC/HEIF photos are converted to high-quality JPG first, since most websites can't display HEIC.</p></details>
+      <p>JPG gets full EXIF + XMP, and WebP gets EXIF and XMP chunks. HEIC/HEIF photos are converted to high-quality JPG first, since most websites can't display HEIC. PNG can hold an <code>eXIf</code> chunk plus XMP, but Windows Explorer and many apps never show GPS for PNG files, so by default PNGs are saved as JPG (change this under <b>Save as</b>).</p></details>
     <details><summary>Do Google or social networks keep the geotags?</summary>
       <p>Many platforms (including Google Business Profile, Facebook and Instagram) strip metadata on upload, so geotags mostly matter for your own website, image search on your pages and photo libraries. Descriptive titles, alt text and filenames still help SEO.</p></details>
     <details><summary>How does the free AI work?</summary>
