@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GeoTag Studio – Free Online Photo Geotagger with AI</title>
+  <meta name="description" content="Geotag JPG, PNG, WebP and HEIC photos for free. Add GPS coordinates, SEO titles, alt text and keywords with free AI. Everything runs privately in your browser." />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <script>
+    try { const t = localStorage.getItem('gts.theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <img src="/favicon.svg" alt="" width="28" height="28" />
+      <span>GeoTag <b>Studio</b></span>
+    </a>
+    <div class="topbar-actions">
+      <button class="btn ghost" id="btn-ai-settings" title="AI settings">✨ <span class="hide-sm">AI: </span><span id="ai-provider-label">Built-in</span></button>
+      <button class="btn ghost icon" id="btn-theme" title="Toggle light/dark">◐</button>
+    </div>
+  </header>
+
+  <section class="banner">
+    <strong>Geotag all your photos at once — free.</strong>
+    Add GPS, SEO titles, alt text and keywords to JPG, PNG, WebP &amp; HEIC. Photos never leave your browser.
+    AI writes metadata for you, and can even guess where a photo was taken.
+  </section>
+
+  <main class="layout">
+    <!-- MAP -->
+    <section class="card map-card">
+      <div class="search-row">
+        <div class="search-wrap">
+          <input id="search" type="search" autocomplete="off" placeholder="Search place / address, paste lat,lng or a Google Maps link" />
+          <ul id="search-results" class="dropdown" hidden></ul>
+        </div>
+        <button class="btn" id="btn-search">Search</button>
+        <button class="btn ghost icon" id="btn-locate" title="Use my current location">◎</button>
+        <div class="history-wrap">
+          <button class="btn ghost icon" id="btn-history" title="Recent locations">⟲</button>
+          <ul id="history-list" class="dropdown right" hidden></ul>
+        </div>
+      </div>
+      <div id="map"></div>
+      <div class="coords-row">
+        <label>Lat <input id="in-lat" type="number" step="any" placeholder="0.000000" /></label>
+        <label>Lng <input id="in-lon" type="number" step="any" placeholder="0.000000" /></label>
+        <label>Alt (m) <input id="in-alt" type="number" step="any" placeholder="optional" /></label>
+        <button class="btn" id="btn-set-coords">Set</button>
+      </div>
+      <div class="coords-row small">
+        <label class="check"><input type="checkbox" id="chk-existing" checked /> Show existing geotags</label>
+        <label>Spread
+          <select id="sel-jitter" title="Randomly spread multiple photos around the pin">
+            <option value="0">Exact pin</option>
+            <option value="15">± 15 m</option>
+            <option value="50">± 50 m</option>
+            <option value="150">± 150 m</option>
+          </select>
+        </label>
+        <span id="place-label" class="muted"></span>
+      </div>
+    </section>
+
+    <!-- RIGHT -->
+    <section class="right-col">
+      <label class="dropzone card" id="dropzone">
+        <input id="file-input" type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png,.webp" hidden />
+        <div class="dz-icon">⇪</div>
+        <div><b>Drop JPG / HEIC / PNG / WebP photos here</b></div>
+        <div class="muted">or click to choose — batch upload supported</div>
+      </label>
+
+      <div class="card editor" id="editor">
+        <div class="editor-head">
+          <h2 id="editor-title">Select photos to edit</h2>
+          <span class="muted" id="editor-sub">Pick a location on the map, fill in details, then download.</span>
+        </div>
+        <div class="ai-row">
+          <button class="btn ai" id="btn-ai-fill" disabled>✨ AI: title, alt text &amp; keywords</button>
+          <button class="btn ai ghost" id="btn-ai-locate" disabled>🌍 AI: guess location</button>
+        </div>
+        <fieldset id="fields" disabled>
+          <label>Title <span class="count" data-count="title"></span>
+            <input data-field="title" type="text" maxlength="200" />
+          </label>
+          <label>Description / Alt text <span class="count" data-count="description"></span>
+            <textarea data-field="description" rows="2" maxlength="1000"></textarea>
+          </label>
+          <label>Keywords &amp; tags <span class="muted">(comma separated)</span> <span class="count" data-count="keywords"></span>
+            <textarea data-field="keywords" rows="2"></textarea>
+          </label>
+          <button type="button" class="link" id="btn-add-place-kw">+ add location keywords</button>
+          <div class="grid2">
+            <label>Author / Artist <input data-field="author" type="text" /></label>
+            <label>Copyright <input data-field="copyright" type="text" /></label>
+          </div>
+          <div class="grid2">
+            <label>Date taken <input data-field="date" type="datetime-local" step="1" /></label>
+            <label>Altitude (m) <input data-field="alt" type="number" step="any" /></label>
+          </div>
+          <label class="check"><input type="checkbox" id="chk-rename" /> Rename files using title (SEO-friendly filenames)</label>
+        </fieldset>
+        <div class="actions">
+          <button class="btn primary" id="btn-download" disabled>⬇ Write tags &amp; download</button>
+          <button class="btn ghost" id="btn-strip" disabled title="Download a copy with all metadata removed">🧹 Strip metadata</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="card gallery-card">
+    <div class="gallery-bar">
+      <label class="check"><input type="checkbox" id="chk-all" /> Select all</label>
+      <span id="gallery-count" class="muted">No images uploaded yet</span>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="btn-remove" disabled>Remove selected</button>
+    </div>
+    <div id="gallery" class="gallery"><div class="empty">☝ No images uploaded yet — drop some photos above.</div></div>
+  </section>
+
+  <section class="faq">
+    <h2>FAQ</h2>
+    <details><summary>What is geotagging and why does it help?</summary>
+      <p>Geotagging stores GPS coordinates (and optionally titles, descriptions and keywords) inside a photo's EXIF/XMP metadata. Galleries, maps and photo libraries use it to show where a photo was taken, and local businesses use it to keep photos consistent with their location.</p></details>
+    <details><summary>Are my photos uploaded anywhere?</summary>
+      <p>No. Reading, editing and writing metadata happens entirely in your browser. The only network calls are map tiles, place search (OpenStreetMap Nominatim) and — only if you choose a cloud AI provider — a downscaled copy of the photo sent to that provider.</p></details>
+    <details><summary>Which formats are supported?</summary>
+      <p>JPG gets full EXIF + XMP. PNG gets an <code>eXIf</code> chunk plus XMP, and WebP gets EXIF and XMP chunks. HEIC/HEIF photos are converted to high-quality JPG first, since most websites can't display HEIC.</p></details>
+    <details><summary>Do Google or social networks keep the geotags?</summary>
+      <p>Many platforms (including Google Business Profile, Facebook and Instagram) strip metadata on upload, so geotags mostly matter for your own website, image search on your pages and photo libraries. Descriptive titles, alt text and filenames still help SEO.</p></details>
+    <details><summary>How does the free AI work?</summary>
+      <p><b>Built-in</b> runs a small captioning model directly in your browser — no key, nothing leaves your device (first use downloads the model once). For richer, SEO-quality results and location guessing, add a free <b>Google Gemini</b> key, or use any OpenAI-compatible provider such as OpenRouter's free models or Groq.</p></details>
+    <details><summary>How can I verify the geotags?</summary>
+      <p>Click <b>ⓘ</b> on any photo to compare its metadata before and after. On your computer, Windows Explorer → Properties → Details, or macOS Preview → Inspector → GPS will show the location.</p></details>
+  </section>
+
+  <footer class="footer muted">
+    GeoTag Studio · Free &amp; open source · Map data © OpenStreetMap contributors · Imagery © Esri
+  </footer>
+
+  <!-- AI settings modal -->
+  <dialog id="dlg-ai" class="modal">
+    <form method="dialog" id="ai-form">
+      <h2>✨ AI settings</h2>
+      <div class="providers">
+        <label class="provider"><input type="radio" name="provider" value="builtin" />
+          <div><b>Built-in (in your browser)</b><span>Free, no key, fully private. Basic captions + smart local-SEO keywords. ~250 MB model downloads once.</span></div></label>
+        <label class="provider"><input type="radio" name="provider" value="gemini" />
+          <div><b>Google Gemini</b><span>Best quality + location guessing. Free API key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.</span></div></label>
+        <label class="provider"><input type="radio" name="provider" value="openai" />
+          <div><b>OpenAI-compatible</b><span>OpenRouter free models, Groq free tier, local Ollama, or any compatible API.</span></div></label>
+      </div>
+      <div class="pgroup" data-for="gemini">
+        <label>Gemini API key <input name="geminiKey" type="password" autocomplete="off" placeholder="AIza…" /></label>
+        <label>Model <input name="geminiModel" type="text" /></label>
+      </div>
+      <div class="pgroup" data-for="openai">
+        <div class="presets">Presets:
+          <button type="button" class="chip" data-preset="openrouter">OpenRouter (free)</button>
+          <button type="button" class="chip" data-preset="groq">Groq (free)</button>
+          <button type="button" class="chip" data-preset="ollama">Ollama (local)</button>
+          <a id="preset-key-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener">get a key ↗</a>
+        </div>
+        <label>Base URL <input name="openaiBase" type="url" /></label>
+        <label>API key <input name="openaiKey" type="password" autocomplete="off" /></label>
+        <label>Vision model <input name="openaiModel" type="text" /></label>
+      </div>
+      <h3>Context for better SEO</h3>
+      <label>Business / brand name <input name="business" type="text" placeholder="e.g. Sunrise Plumbing" /></label>
+      <label>Focus keywords / services <input name="focus" type="text" placeholder="e.g. emergency plumber, water heater repair" /></label>
+      <label>Language
+        <select name="language">
+          <option>English</option><option>Spanish</option><option>French</option><option>German</option><option>Portuguese</option>
+          <option>Italian</option><option>Dutch</option><option>Urdu</option><option>Hindi</option><option>Arabic</option>
+          <option>Turkish</option><option>Japanese</option><option>Chinese</option>
+        </select>
+      </label>
+      <p class="muted small">Keys are stored only in this browser and sent only to the provider you choose.</p>
+      <div class="actions end">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="save" id="btn-ai-save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Inspect modal -->
+  <dialog id="dlg-inspect" class="modal wide">
+    <form method="dialog">
+      <h2 id="inspect-title">Metadata</h2>
+      <div id="inspect-body"></div>
+      <div class="actions end"><button class="btn primary">Close</button></div>
+    </form>
+  </dialog>
+
+  <div id="toasts"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
