@@ -189,10 +189,15 @@ function buildXmp(m) {
     const iso = new Date(m.date.getTime() - m.date.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
     p.push(`<photoshop:DateCreated>${iso}</photoshop:DateCreated><exif:DateTimeOriginal>${iso}</exif:DateTimeOriginal>`);
   }
+  // Windows Explorer's "Date acquired" is read only from this Microsoft XMP tag.
+  // Use the explicit acquired date, else the date taken, else now.
+  const acq = m.dateAcquired || m.date || new Date();
+  const acqIso = new Date(acq.getTime() - acq.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+  p.push(`<MicrosoftPhoto:DateAcquired>${acqIso}</MicrosoftPhoto:DateAcquired>`);
   p.push(`<xmp:CreatorTool>GeoTag Studio</xmp:CreatorTool><xmp:MetadataDate>${new Date().toISOString()}</xmp:MetadataDate>`);
   return `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:exif="http://ns.adobe.com/exif/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">
+<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:exif="http://ns.adobe.com/exif/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/" xmlns:MicrosoftPhoto="http://ns.microsoft.com/photo/1.0/">
 ${p.join('\n')}
 </rdf:Description></rdf:RDF></x:xmpmeta>
 <?xpacket end="w"?>`;
